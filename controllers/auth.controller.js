@@ -41,7 +41,7 @@ export const registerWithGoogleController = async (req, res) => {
     // assign token in cookie
    res.cookie("userToken", userToken, {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
+  secure: true,
   sameSite: "none", // 🔹 allow cross-site cookies
   maxAge: 7 * 24 * 60 * 60 * 1000,
 });
