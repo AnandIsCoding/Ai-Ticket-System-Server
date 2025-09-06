@@ -39,12 +39,13 @@ export const registerWithGoogleController = async (req, res) => {
       expiresIn: "7d",
     });
     // assign token in cookie
-    res.cookie("userToken", userToken, {
-      httpOnly: true,
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      secure: process.env.NODE_ENV === "production",
-    });
+   res.cookie("userToken", userToken, {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "none", // 🔹 allow cross-site cookies
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+});
+
     // send registration mail to new user
     try {
       if (!userExists) {
