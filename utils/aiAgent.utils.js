@@ -36,7 +36,7 @@ Description: ${ticket.description}
 `);
 
   
-  // console.log("Full AI response:", JSON.stringify(response, null, 2));
+  console.log("Full AI response:", JSON.stringify(response, null, 2));
 
   // Extract raw text from multiple possible fields
   const output = response?.output?.[0];
