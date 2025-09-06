@@ -29,6 +29,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
   "http://localhost:7000",
+  "https://ai-ticket-system-client.vercel.app"
 ];
 const corsOptions = {
   origin: (origin, callback) => {

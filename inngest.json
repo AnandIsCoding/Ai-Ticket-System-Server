@@ -1,5 +1,5 @@
 {
   "dev": {
-    "url": "http://localhost:3000/api/v1/inngest"
+    "url": "https://ai-ticket-system-client.vercel.app/api/v1/inngest"
   }
 }
