@@ -33,6 +33,8 @@ export const onTicketCreated = inngest.createFunction(
       // AI analysis
       const aiResponse = await analyzeTicket(ticket);
 
+      console.log('AI response is -->> ',aiResponse)
+
       // pick moderator/admin
       const moderator = await step.run("assign-moderator", async () => {
         let user =

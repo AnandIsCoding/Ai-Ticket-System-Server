@@ -35,6 +35,7 @@ export const createTicket = async (req, res) => {
         createdBy: req.user.userId,
       },
     });
+    
 
     return res.status(StatusCodes.OK).json({
       success: true,
