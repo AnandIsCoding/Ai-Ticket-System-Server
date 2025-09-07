@@ -16,10 +16,11 @@ export const createTicket = async (req, res) => {
       });
     }
 
+    // ✅ Create ticket
     const newTicket = await Ticket.create({
       title,
       description,
-      createdBy: mongoose.Types.ObjectId(req.user.userId), // ensure ObjectId
+      createdBy: req.user.userId, // Mongoose auto-casts string -> ObjectId
       status: "Todo",
       priority: "medium",
       relatedSkills: [],
@@ -28,6 +29,7 @@ export const createTicket = async (req, res) => {
     console.log("Ticket created:", newTicket._id);
     console.log("Sending Inngest event...");
 
+    // ✅ Send Inngest event to production
     await inngest.send(
       {
         name: "ticket/created",
