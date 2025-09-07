@@ -1,12 +1,13 @@
+import { createAgent, gemini } from "@inngest/agent-kit";
+import { NonRetriableError } from "inngest";
 import mongoose from "mongoose";
-import { inngest } from "../client.js";
+
+import { DATABASE_URI, GEMINI_API_KEY } from "../../configs/server.config.js";
+import ticketAssignedEmail from "../../mail/templates/ticketAssignedEmail.js";
 import Ticket from "../../models/ticket.model.js";
 import User from "../../models/user.model.js";
-import { NonRetriableError } from "inngest";
 import mailSender from "../../utils/mailSender.utils.js";
-import ticketAssignedEmail from "../../mail/templates/ticketAssignedEmail.js";
-import { DATABASE_URI, GEMINI_API_KEY } from "../../configs/server.config.js";
-import { createAgent, gemini } from "@inngest/agent-kit";
+import { inngest } from "../client.js";
 
 // AI Analysis Function
 const analyzeTicket = async (ticket) => {

@@ -2,12 +2,12 @@ import chalk from "chalk"; // Chalk for colored console logs
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
-import { serve } from "inngest/express"; // ✅ this gives you the serve() function
 import { StatusCodes } from "http-status-codes";
+import { serve } from "inngest/express"; // ✅ this gives you the serve() function
 
-import { onTicketCreated } from "./inngest/functions/onTicketCreate.js";
 import connectToDb from "./configs/database.config.js";
 import { inngest } from "./inngest/client.js";
+import { onTicketCreated } from "./inngest/functions/onTicketCreate.js";
 import adminRouter from "./routes/admin.route.js";
 import authRouter from "./routes/auth.route.js";
 import ticketRouter from "./routes/ticket.route.js";

@@ -1,9 +1,9 @@
 import chalk from "chalk";
 import { StatusCodes } from "http-status-codes";
 import jwt from "jsonwebtoken";
-import User from "../models/user.model.js";
 
 import { SECRET_KEY } from "../configs/server.config.js";
+import User from "../models/user.model.js";
 
 // Auth
 export const isAuthenticatedUser = async (req, res, next) => {

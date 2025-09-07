@@ -1,4 +1,5 @@
 import { Inngest } from "inngest";
+
 import { INNGEST_EVENT_KEY , INNGEST_SIGNING_KEY} from "../configs/server.config.js";
 
 export const inngest = new Inngest({
