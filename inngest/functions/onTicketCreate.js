@@ -16,20 +16,15 @@ export const onTicketCreated = inngest.createFunction(
     let ticket, moderator, updatedTicket, aiResponse = {};
 
     try {
-      console.log("🚀 Function triggered for event:", event.name);
+      console.log("🚀 Inngest Function triggered for event:", event.name);
 
       // 1️⃣ Ensure MongoDB connection
       if (mongoose.connection.readyState === 0) {
-        try {
-          await mongoose.connect(DATABASE_URI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-          });
-          console.log("✅ Connected to MongoDB");
-        } catch (dbErr) {
-          console.error("❌ MongoDB connection failed:", dbErr);
-          throw new NonRetriableError("DB connection failed");
-        }
+        await mongoose.connect(DATABASE_URI, {
+          useNewUrlParser: true,
+          useUnifiedTopology: true,
+        });
+        console.log("✅ Connected to MongoDB");
       } else {
         console.log("✅ MongoDB already connected");
       }
@@ -48,10 +43,21 @@ export const onTicketCreated = inngest.createFunction(
       // 3️⃣ Run AI analysis safely
       try {
         aiResponse = await analyzeTicket(ticket);
-        if (!aiResponse) aiResponse = {};
+        if (!aiResponse) {
+          console.warn("⚠️ AI returned null, using fallback defaults");
+          aiResponse = {
+            priority: "Medium",
+            helpfulNotes: "No AI suggestions available",
+            relatedSkills: [],
+          };
+        }
       } catch (err) {
         console.error("❌ AI agent failed:", err);
-        aiResponse = {};
+        aiResponse = {
+          priority: "Medium",
+          helpfulNotes: "No AI suggestions available",
+          relatedSkills: [],
+        };
       }
       console.log("AI response:", aiResponse);
 
@@ -67,28 +73,28 @@ export const onTicketCreated = inngest.createFunction(
         if (!user) throw new NonRetriableError("No admin or moderator found");
         return user;
       });
-      console.log("✅ Assigned to user:", moderator.email);
+      console.log("✅ Assigned to user:", moderator.email, moderator._id.toString());
 
       // 5️⃣ Update ticket with AI fields + assignedTo
-      try {
-        updatedTicket = await Ticket.findByIdAndUpdate(
+      updatedTicket = await step.run("update-ticket", async () => {
+        const updated = await Ticket.findByIdAndUpdate(
           ticket._id,
           {
-            priority: aiResponse?.priority?.toLowerCase?.() || "medium",
-            helpfulNotes: aiResponse?.helpfulNotes || "",
-            relatedSkills: Array.isArray(aiResponse?.relatedSkills)
+            priority: (aiResponse.priority || "Medium").toLowerCase(),
+            helpfulNotes: aiResponse.helpfulNotes || "",
+            relatedSkills: Array.isArray(aiResponse.relatedSkills)
               ? aiResponse.relatedSkills
               : [],
             status: "In Progress",
             assignedTo: moderator._id,
           },
-          { new: true }
+          { new: true, runValidators: true }
         );
-        console.log("✅ Ticket updated with assignedTo:", updatedTicket.assignedTo.toString());
-      } catch (updateErr) {
-        console.error("❌ Failed to update ticket:", updateErr);
-        throw new NonRetriableError("Ticket update failed");
-      }
+
+        if (!updated) throw new NonRetriableError("Ticket update failed");
+        return updated;
+      });
+      console.log("✅ Ticket updated successfully:", updatedTicket._id.toString());
 
       // 6️⃣ Send email safely
       await step.run("send-email", async () => {
@@ -104,8 +110,8 @@ export const onTicketCreated = inngest.createFunction(
         }
       });
 
-      console.log("🎉 Function completed successfully");
-      return { success: true };
+      console.log("🎉 Inngest Function completed successfully");
+      return { success: true, ticketId: updatedTicket._id.toString() };
     } catch (err) {
       console.error("❌ Inngest Function Error:", err);
       return { success: false, error: err.message };
