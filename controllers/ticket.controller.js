@@ -27,15 +27,19 @@ export const createTicket = async (req, res) => {
     // console.log("Ticket created:", newTicket);
 
     // Send event to Inngest
-    await inngest.send({
-      name: "ticket/created", // ← add slash here
-      data: {
-        ticketId: newTicket._id,
-        title,
-        description,
-        createdBy: req.user.userId,
-      },
-    });
+   console.log("Ticket created:", newTicket._id);
+console.log("Sending Inngest event...");
+await inngest.send({
+  name: "ticket/created", 
+  data: {
+    ticketId: newTicket._id,
+    title,
+    description,
+    createdBy: req.user.userId,
+  },
+});
+console.log("✅ Inngest event sent!");
+
     
 
     return res.status(StatusCodes.OK).json({
