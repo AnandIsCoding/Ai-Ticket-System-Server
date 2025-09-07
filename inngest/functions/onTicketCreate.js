@@ -19,7 +19,7 @@ export const onTicketCreated = inngest.createFunction(
       console.log("🚀 Inngest Function triggered for event:", event.name);
 
       // 1️⃣ Ensure MongoDB connection
-      if (mongoose.connection.readyState === 0) {
+      if (mongoose.connection.readyState !== 1) {
         await mongoose.connect(DATABASE_URI, {
           useNewUrlParser: true,
           useUnifiedTopology: true,
@@ -81,12 +81,12 @@ export const onTicketCreated = inngest.createFunction(
           ticket._id,
           {
             priority: (aiResponse.priority || "Medium").toLowerCase(),
-            helpfulNotes: aiResponse.helpfulNotes || "",
+            helpfulNotes: aiResponse.helpfulNotes || "No notes provided by AI",
             relatedSkills: Array.isArray(aiResponse.relatedSkills)
               ? aiResponse.relatedSkills
-              : [],
+              : ["general"],
             status: "In Progress",
-            assignedTo: moderator._id,
+            assignedTo: mongoose.Types.ObjectId(moderator._id),
           },
           { new: true, runValidators: true }
         );

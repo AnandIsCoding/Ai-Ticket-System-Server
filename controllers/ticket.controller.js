@@ -24,21 +24,25 @@ export const createTicket = async (req, res) => {
       relatedSkills: [],
     });
 
-    // console.log("Ticket created:", newTicket);
-
-    // Send event to Inngest
     console.log("Ticket created:", newTicket._id);
     console.log("Sending Inngest event...");
-    await inngest.send({
-      name: "ticket/created",
-      data: {
-        ticketId: newTicket._id,
-        title,
-        description,
-        createdBy: req.user.userId,
+
+    // ✅ Correctly send to production Inngest URL
+    await inngest.send(
+      {
+        name: "ticket/created",
+        data: {
+          ticketId: newTicket._id,
+          title,
+          description,
+          createdBy: req.user.userId,
+        },
       },
-        url:"https://ai-ticket-system-server.vercel.app/api/v1/inngest"
-    });
+      {
+        url: "https://ai-ticket-system-server.vercel.app/api/v1/inngest",
+      }
+    );
+
     console.log("✅ Inngest event sent!");
 
     return res.status(StatusCodes.OK).json({
