@@ -13,62 +13,76 @@ export const onTicketCreated = inngest.createFunction(
   { event: "ticket/created" },
   async ({ event, step }) => {
     try {
+      // 1️⃣ Ensure MongoDB connection is ready
       if (mongoose.connection.readyState === 0) {
-        await mongoose.connect(DATABASE_URI, {
-          useNewUrlParser: true,
-          useUnifiedTopology: true,
-        });
-        console.log("Inngest function connected to MongoDB ✅");
+        try {
+          await mongoose.connect(DATABASE_URI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+          });
+          console.log("✅ Connected to MongoDB");
+        } catch (dbErr) {
+          console.error("❌ MongoDB connection failed:", dbErr);
+          throw new NonRetriableError("DB connection failed");
+        }
       }
 
       const { ticketId } = event.data;
 
-      // fetch ticket
+      // 2️⃣ Fetch ticket safely
       const ticket = await step.run("fetch-ticket", async () => {
         const t = await Ticket.findById(ticketId);
         if (!t) throw new NonRetriableError("Ticket not found");
         return t;
       });
 
-      // AI analysis
-      const aiResponse = await analyzeTicket(ticket);
+      // 3️⃣ Run AI analysis safely with fallback
+      let aiResponse = {};
+      try {
+        aiResponse = await analyzeTicket(ticket);
+      } catch (err) {
+        console.error("❌ AI agent failed:", err);
+        aiResponse = {};
+      }
 
-      console.log('AI response is -->> ',aiResponse)
+      console.log("AI response:", aiResponse);
 
-      // pick moderator/admin
+      // 4️⃣ Pick moderator/admin
       const moderator = await step.run("assign-moderator", async () => {
-        let user =
+        const user =
           (await User.findOne({ role: "moderator" })) ||
           (await User.findOne({ role: "admin" }));
         if (!user) throw new NonRetriableError("No admin or moderator found");
         return user;
       });
 
-      // update ticket with AI fields + assignedTo
+      // 5️⃣ Update ticket with AI fields + assignedTo
       const updatedTicket = await Ticket.findByIdAndUpdate(
-  ticket._id,
-  {
-    priority: aiResponse?.priority?.toLowerCase?.() || "medium",
-    helpfulNotes: aiResponse?.helpfulNotes || "",
-    relatedSkills: Array.isArray(aiResponse?.relatedSkills)
-      ? aiResponse.relatedSkills
-      : [],
-    status: "In Progress", // must match schema enum
-    assignedTo: moderator._id,
-  },
-  { new: true }
-);
+        ticket._id,
+        {
+          priority: aiResponse?.priority?.toLowerCase?.() || "medium",
+          helpfulNotes: aiResponse?.helpfulNotes || "",
+          relatedSkills: Array.isArray(aiResponse?.relatedSkills)
+            ? aiResponse.relatedSkills
+            : [],
+          status: "In Progress",
+          assignedTo: moderator._id,
+        },
+        { new: true }
+      );
 
-      // console.log("Ticket updated in DB:", updatedTicket);
-
-      // send email
+      // 6️⃣ Send email safely
       await step.run("send-email", async () => {
-        await mailSender(
-          moderator.email,
-          `New Ticket Assigned: ${updatedTicket.title}`,
-          ticketAssignedEmail(moderator.email, updatedTicket.title)
-        );
-        console.log("Email sent to:", moderator.email);
+        try {
+          await mailSender(
+            moderator.email,
+            `New Ticket Assigned: ${updatedTicket.title}`,
+            ticketAssignedEmail(moderator.email, updatedTicket.title)
+          );
+          console.log("✅ Email sent to:", moderator.email);
+        } catch (mailErr) {
+          console.error("❌ Email failed:", mailErr);
+        }
       });
 
       return { success: true };
