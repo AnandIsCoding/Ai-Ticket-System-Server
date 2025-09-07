@@ -3,7 +3,6 @@
     "url": "http://localhost:3000/api/v1/inngest"
   },
   "prod": {
-    "url": "https://ai-ticket-system-server.vercel.app/api/v1/inngest",
-    "eventKey": "YOUR_EVENT_KEY_HERE"
+    "url": "https://ai-ticket-system-server.vercel.app/api/v1/inngest"
   }
 }
