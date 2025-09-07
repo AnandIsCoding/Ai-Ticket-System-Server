@@ -12,63 +12,86 @@ export const onTicketCreated = inngest.createFunction(
   { id: "on-ticket-created", retries: 4 },
   { event: "ticket/created" },
   async ({ event, step }) => {
+    let ticket, moderator, updatedTicket, aiResponse = {};
+
     try {
+      // 1️⃣ Ensure MongoDB connection
       if (mongoose.connection.readyState === 0) {
-        await mongoose.connect(DATABASE_URI, {
-          useNewUrlParser: true,
-          useUnifiedTopology: true,
-        });
-        console.log("Inngest function connected to MongoDB ✅");
+        try {
+          await mongoose.connect(DATABASE_URI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+          });
+          console.log("✅ Connected to MongoDB");
+        } catch (dbErr) {
+          console.error("❌ MongoDB connection failed:", dbErr);
+          throw new NonRetriableError("DB connection failed");
+        }
       }
 
       const { ticketId } = event.data;
 
-      // fetch ticket
-      const ticket = await step.run("fetch-ticket", async () => {
+      // 2️⃣ Fetch ticket
+      ticket = await step.run("fetch-ticket", async () => {
         const t = await Ticket.findById(ticketId);
         if (!t) throw new NonRetriableError("Ticket not found");
         return t;
       });
+      console.log("✅ Ticket fetched:", ticket._id);
 
-      // AI analysis
-      const aiResponse = await analyzeTicket(ticket);
+      // 3️⃣ Run AI analysis safely
+      try {
+        aiResponse = await analyzeTicket(ticket);
+        if (!aiResponse) aiResponse = {};
+      } catch (err) {
+        console.error("❌ AI agent failed:", err);
+        aiResponse = {};
+      }
+      console.log("AI response:", aiResponse);
 
-      console.log('AI response is -->> ',aiResponse)
-
-      // pick moderator/admin
-      const moderator = await step.run("assign-moderator", async () => {
-        let user =
+      // 4️⃣ Pick moderator/admin
+      moderator = await step.run("assign-moderator", async () => {
+        const user =
           (await User.findOne({ role: "moderator" })) ||
           (await User.findOne({ role: "admin" }));
         if (!user) throw new NonRetriableError("No admin or moderator found");
         return user;
       });
+      console.log("✅ Assigned to user:", moderator.email);
 
-      // update ticket with AI fields + assignedTo
-      const updatedTicket = await Ticket.findByIdAndUpdate(
-  ticket._id,
-  {
-    priority: aiResponse?.priority?.toLowerCase?.() || "medium",
-    helpfulNotes: aiResponse?.helpfulNotes || "",
-    relatedSkills: Array.isArray(aiResponse?.relatedSkills)
-      ? aiResponse.relatedSkills
-      : [],
-    status: "In Progress", // must match schema enum
-    assignedTo: moderator._id,
-  },
-  { new: true }
-);
-
-      // console.log("Ticket updated in DB:", updatedTicket);
-
-      // send email
-      await step.run("send-email", async () => {
-        await mailSender(
-          moderator.email,
-          `New Ticket Assigned: ${updatedTicket.title}`,
-          ticketAssignedEmail(moderator.email, updatedTicket.title)
+      // 5️⃣ Update ticket with AI fields + assignedTo
+      try {
+        updatedTicket = await Ticket.findByIdAndUpdate(
+          ticket._id,
+          {
+            priority: aiResponse?.priority?.toLowerCase?.() || "medium",
+            helpfulNotes: aiResponse?.helpfulNotes || "",
+            relatedSkills: Array.isArray(aiResponse?.relatedSkills)
+              ? aiResponse.relatedSkills
+              : [],
+            status: "In Progress",
+            assignedTo: moderator._id,
+          },
+          { new: true }
         );
-        console.log("Email sent to:", moderator.email);
+        console.log("✅ Ticket updated with assignedTo:", updatedTicket.assignedTo);
+      } catch (updateErr) {
+        console.error("❌ Failed to update ticket:", updateErr);
+        throw new NonRetriableError("Ticket update failed");
+      }
+
+      // 6️⃣ Send email safely
+      await step.run("send-email", async () => {
+        try {
+          await mailSender(
+            moderator.email,
+            `New Ticket Assigned: ${updatedTicket.title}`,
+            ticketAssignedEmail(moderator.email, updatedTicket.title)
+          );
+          console.log("✅ Email sent to:", moderator.email);
+        } catch (mailErr) {
+          console.error("❌ Email failed:", mailErr);
+        }
       });
 
       return { success: true };
