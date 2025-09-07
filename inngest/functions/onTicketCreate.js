@@ -15,6 +15,8 @@ export const onTicketCreated = inngest.createFunction(
     let ticket, moderator, updatedTicket, aiResponse = {};
 
     try {
+      console.log("🚀 Function triggered for event:", event.name);
+
       // 1️⃣ Ensure MongoDB connection
       if (mongoose.connection.readyState === 0) {
         try {
@@ -27,9 +29,12 @@ export const onTicketCreated = inngest.createFunction(
           console.error("❌ MongoDB connection failed:", dbErr);
           throw new NonRetriableError("DB connection failed");
         }
+      } else {
+        console.log("✅ MongoDB already connected");
       }
 
       const { ticketId } = event.data;
+      if (!ticketId) throw new NonRetriableError("No ticketId in event data");
 
       // 2️⃣ Fetch ticket
       ticket = await step.run("fetch-ticket", async () => {
@@ -37,7 +42,7 @@ export const onTicketCreated = inngest.createFunction(
         if (!t) throw new NonRetriableError("Ticket not found");
         return t;
       });
-      console.log("✅ Ticket fetched:", ticket._id);
+      console.log("✅ Ticket fetched:", ticket._id.toString());
 
       // 3️⃣ Run AI analysis safely
       try {
@@ -51,9 +56,13 @@ export const onTicketCreated = inngest.createFunction(
 
       // 4️⃣ Pick moderator/admin
       moderator = await step.run("assign-moderator", async () => {
-        const user =
+        let user =
           (await User.findOne({ role: "moderator" })) ||
           (await User.findOne({ role: "admin" }));
+        if (!user) {
+          // fallback: pick first admin in DB
+          user = await User.findOne({ role: "admin" });
+        }
         if (!user) throw new NonRetriableError("No admin or moderator found");
         return user;
       });
@@ -74,7 +83,7 @@ export const onTicketCreated = inngest.createFunction(
           },
           { new: true }
         );
-        console.log("✅ Ticket updated with assignedTo:", updatedTicket.assignedTo);
+        console.log("✅ Ticket updated with assignedTo:", updatedTicket.assignedTo.toString());
       } catch (updateErr) {
         console.error("❌ Failed to update ticket:", updateErr);
         throw new NonRetriableError("Ticket update failed");
@@ -94,10 +103,11 @@ export const onTicketCreated = inngest.createFunction(
         }
       });
 
+      console.log("🎉 Function completed successfully");
       return { success: true };
     } catch (err) {
       console.error("❌ Inngest Function Error:", err);
-      return { success: false };
+      return { success: false, error: err.message };
     }
   }
 );
