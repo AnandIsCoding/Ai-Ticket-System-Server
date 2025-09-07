@@ -44,14 +44,14 @@ app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/ticket", ticketRouter);
 
-// // Inngest webhook
-// app.use(
-//   "/api/v1/inngest",
-//   serve({
-//     client: inngest,
-//     functions: [onTicketCreated],
-//   })
-// );
+// Inngest webhook
+app.use(
+  "/api/v1/inngest",
+  serve({
+    client: inngest,
+    functions: [onTicketCreated],
+  })
+);
 
 // Root route
 app.get("/", (_, res) =>
