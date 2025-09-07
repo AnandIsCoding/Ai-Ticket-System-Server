@@ -1,9 +1,9 @@
+  import axios from "axios";
 import chalk from "chalk";
 import { StatusCodes } from "http-status-codes";
 
 import { inngest } from "../inngest/client.js";
 import Ticket from "../models/ticket.model.js";
-  import axios from "axios";
 
 export const createTicket = async (req, res) => {
   try {

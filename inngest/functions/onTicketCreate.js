@@ -1,12 +1,13 @@
+import { NonRetriableError } from "inngest";
 import mongoose from "mongoose";
-import { inngest } from "../client.js";
+
+import { DATABASE_URI } from "../../configs/server.config.js";
+import ticketAssignedEmail from "../../mail/templates/ticketAssignedEmail.js";
 import Ticket from "../../models/ticket.model.js";
 import User from "../../models/user.model.js";
-import { NonRetriableError } from "inngest";
-import mailSender from "../../utils/mailSender.utils.js";
-import ticketAssignedEmail from "../../mail/templates/ticketAssignedEmail.js";
-import { DATABASE_URI } from "../../configs/server.config.js";
 import analyzeTicket from "../../utils/aiAgent.utils.js";
+import mailSender from "../../utils/mailSender.utils.js";
+import { inngest } from "../client.js";
 
 export const onTicketCreated = inngest.createFunction(
   { id: "on-ticket-created", retries: 4 },
