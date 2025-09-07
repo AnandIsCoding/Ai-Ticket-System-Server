@@ -13,3 +13,4 @@ export const GEMINI_API_KEY = process.env.GEMINI_API_KEY
 
 export const INNGEST_EVENT_KEY = process.env.INNGEST_EVENT_KEY
 
+export const INNGEST_SIGNING_KEY = process.env.INNGEST_SIGNING_KEY
