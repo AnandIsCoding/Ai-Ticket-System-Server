@@ -18,7 +18,7 @@ export const onTicketCreated = inngest.createFunction(
     try {
       console.log("🚀 Inngest Function triggered for event:", event.name);
 
-      // Connect to MongoDB if not connected
+      // Connect to MongoDB if not already connected
       if (mongoose.connection.readyState !== 1) {
         await mongoose.connect(DATABASE_URI, {
           useNewUrlParser: true,
@@ -40,15 +40,14 @@ export const onTicketCreated = inngest.createFunction(
       });
       console.log("✅ Ticket fetched:", ticket._id.toString());
 
-      // AI analysis
+      // Run AI analysis
       try {
         aiResponse = await analyzeTicket(ticket);
         if (!aiResponse) {
-          console.warn("⚠️ AI returned null, using fallback defaults");
           aiResponse = {
             priority: "Medium",
             helpfulNotes: "No AI suggestions available",
-            relatedSkills: ["general"],
+            relatedSkills: [],
           };
         }
       } catch (err) {
@@ -56,19 +55,19 @@ export const onTicketCreated = inngest.createFunction(
         aiResponse = {
           priority: "Medium",
           helpfulNotes: "No AI suggestions available",
-          relatedSkills: ["general"],
+          relatedSkills: [],
         };
       }
       console.log("AI response:", aiResponse);
 
-      // Assign moderator/admin
+      // Pick moderator/admin (or default to specific email)
       moderator = await step.run("assign-moderator", async () => {
         let user =
           (await User.findOne({ role: "moderator" })) ||
           (await User.findOne({ role: "admin" }));
         if (!user) {
-          // fallback: pick first admin
-          user = await User.findOne({ role: "admin" });
+          // Default to specific email
+          user = await User.findOne({ email: "anandkumarj669@gmail.com" });
         }
         if (!user) throw new NonRetriableError("No admin or moderator found");
         return user;
@@ -86,7 +85,7 @@ export const onTicketCreated = inngest.createFunction(
               ? aiResponse.relatedSkills
               : ["general"],
             status: "In Progress",
-            assignedTo: mongoose.Types.ObjectId(moderator._id),
+            assignedTo: moderator._id, // leave as ObjectId
           },
           { new: true, runValidators: true }
         );
