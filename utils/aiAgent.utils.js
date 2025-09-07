@@ -1,6 +1,14 @@
+import mongoose from "mongoose";
+import { inngest } from "../client.js";
+import Ticket from "../../models/ticket.model.js";
+import User from "../../models/user.model.js";
+import { NonRetriableError } from "inngest";
+import mailSender from "../../utils/mailSender.utils.js";
+import ticketAssignedEmail from "../../mail/templates/ticketAssignedEmail.js";
+import { DATABASE_URI, GEMINI_API_KEY } from "../../configs/server.config.js";
 import { createAgent, gemini } from "@inngest/agent-kit";
-import { GEMINI_API_KEY } from "../configs/server.config.js";
 
+// AI Analysis Function
 const analyzeTicket = async (ticket) => {
   const supportAgent = createAgent({
     model: gemini({
@@ -9,55 +17,104 @@ const analyzeTicket = async (ticket) => {
     }),
     name: "AI Ticket Triage Assistant",
     system: `You are an expert AI assistant that processes technical support tickets.
-
-Your job is to:
-1. Summarize the issue.
-2. Estimate its priority.
-3. Provide helpful notes and resource links for human moderators.
-4. List relevant technical skills required.
-
-IMPORTANT:
-- Respond with only valid raw JSON.
-- Do NOT include markdown, code fences, comments, or extra formatting.
-- The format must be a raw JSON object.`
-  });
-
-  // Prompt the AI to analyze the ticket
-  const response = await supportAgent.run(`
-Analyze the following ticket and return only a strict JSON object with:
+Respond with valid raw JSON only:
 - summary (1-2 sentences)
-- priority ("Low", "Medium", or "High")
+- priority ("Low", "Medium", "High")
 - helpfulNotes (technical guidance)
 - relatedSkills (array of relevant skills)
+`,
+  });
 
-Ticket:
+  const response = await supportAgent.run(`
+Analyze the following ticket and return a strict JSON object:
+
 Title: ${ticket.title}
 Description: ${ticket.description}
 `);
 
-  
-  console.log("Full AI response:", JSON.stringify(response, null, 2));
+  const raw = response?.output?.[0]?.content || "";
+  if (!raw) return null;
 
-  // Extract raw text from multiple possible fields
-  const output = response?.output?.[0];
-const raw = output?.content || ""; // content is already a string
-
-
-  if (!raw) {
-  console.log("AI returned empty response");
-  return null;
-}
-
-try {
-  const cleaned = raw.replace(/```json\s*|```/gi, "").trim();
-  const parsed = JSON.parse(cleaned);
-  return parsed;
-} catch (err) {
-  console.log("Failed to parse AI JSON:", err.message);
-  console.log("Raw AI output:", raw);
-  return null;
-}
-
+  try {
+    const cleaned = raw.replace(/```json\s*|```/gi, "").trim();
+    return JSON.parse(cleaned);
+  } catch (err) {
+    console.error("Failed to parse AI JSON:", err.message);
+    return null;
+  }
 };
 
-export default analyzeTicket;
+// Inngest Function
+export const onTicketCreated = inngest.createFunction(
+  { id: "on-ticket-created", retries: 4 },
+  { event: "ticket/created" },
+  async ({ event }) => {
+    const { ticketId } = event.data;
+
+    // Immediately respond to avoid serverless timeout
+    (async () => {
+      try {
+        // Ensure MongoDB connection
+        if (mongoose.connection.readyState === 0) {
+          await mongoose.connect(DATABASE_URI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+          });
+          console.log("✅ MongoDB connected");
+        }
+
+        // Fetch ticket
+        const ticket = await Ticket.findById(ticketId);
+        if (!ticket) throw new NonRetriableError("Ticket not found");
+
+        // Pick moderator/admin
+        const moderator =
+          (await User.findOne({ role: "moderator" })) ||
+          (await User.findOne({ role: "admin" }));
+        if (!moderator) throw new NonRetriableError("No moderator/admin found");
+
+        // AI analysis
+        let aiResponse = {};
+        try {
+          aiResponse = (await analyzeTicket(ticket)) || {};
+        } catch (err) {
+          console.error("❌ AI failed:", err);
+        }
+
+        // Update ticket with AI fields + assignedTo
+        const updatedTicket = await Ticket.findByIdAndUpdate(
+          ticket._id,
+          {
+            priority: aiResponse?.priority?.toLowerCase?.() || "medium",
+            helpfulNotes: aiResponse?.helpfulNotes || "",
+            relatedSkills: Array.isArray(aiResponse?.relatedSkills)
+              ? aiResponse.relatedSkills
+              : [],
+            status: "In Progress",
+            assignedTo: moderator._id,
+          },
+          { new: true }
+        );
+
+        console.log("✅ Ticket updated:", updatedTicket._id);
+
+        // Send email
+        try {
+          await mailSender(
+            moderator.email,
+            `New Ticket Assigned: ${updatedTicket.title}`,
+            ticketAssignedEmail(moderator.email, updatedTicket.title)
+          );
+          console.log("✅ Email sent to:", moderator.email);
+        } catch (err) {
+          console.error("❌ Email failed:", err);
+        }
+      } catch (err) {
+        console.error("❌ Inngest background error:", err);
+      }
+    })();
+
+    // Return immediately
+    return { success: true, message: "Ticket processing started in background" };
+  }
+);
