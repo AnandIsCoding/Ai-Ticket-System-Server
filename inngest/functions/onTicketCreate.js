@@ -13,20 +13,18 @@ export const onTicketCreated = inngest.createFunction(
   { id: "on-ticket-created", retries: 4 },
   { event: "ticket/created" },
   async ({ event, step }) => {
-    let ticket, moderator, updatedTicket, aiResponse = {};
+    let ticket, updatedTicket, aiResponse = {};
 
     try {
       console.log("🚀 Inngest Function triggered for event:", event.name);
 
       // 1️⃣ Ensure MongoDB connection
-      if (mongoose.connection.readyState !== 1) {
+      if (mongoose.connection.readyState === 0) {
         await mongoose.connect(DATABASE_URI, {
           useNewUrlParser: true,
           useUnifiedTopology: true,
         });
         console.log("✅ Connected to MongoDB");
-      } else {
-        console.log("✅ MongoDB already connected");
       }
 
       const { ticketId } = event.data;
@@ -44,7 +42,6 @@ export const onTicketCreated = inngest.createFunction(
       try {
         aiResponse = await analyzeTicket(ticket);
         if (!aiResponse) {
-          console.warn("⚠️ AI returned null, using fallback defaults");
           aiResponse = {
             priority: "Medium",
             helpfulNotes: "No AI suggestions available",
@@ -61,42 +58,35 @@ export const onTicketCreated = inngest.createFunction(
       }
       console.log("AI response:", aiResponse);
 
-      // 4️⃣ Pick moderator/admin
-      moderator = await step.run("assign-moderator", async () => {
-        let user =
-          (await User.findOne({ role: "moderator" })) ||
-          (await User.findOne({ role: "admin" }));
-        if (!user) {
-          // fallback: pick first admin in DB
-          user = await User.findOne({ role: "admin" });
-        }
-        if (!user) throw new NonRetriableError("No admin or moderator found");
+      // 4️⃣ Assign to Anand by default
+      const moderator = await step.run("assign-admin", async () => {
+        const user = await User.findOne({ email: "anandkumarj669@gmail.com" });
+        if (!user) throw new NonRetriableError("Admin not found");
         return user;
       });
-      console.log("✅ Assigned to user:", moderator.email, moderator._id.toString());
+      console.log("✅ Assigned to admin:", moderator.email, moderator._id.toString());
 
-      // 5️⃣ Update ticket with AI fields + assignedTo
+      // 5️⃣ Update ticket
       updatedTicket = await step.run("update-ticket", async () => {
         const updated = await Ticket.findByIdAndUpdate(
           ticket._id,
           {
             priority: (aiResponse.priority || "Medium").toLowerCase(),
-            helpfulNotes: aiResponse.helpfulNotes || "No notes provided by AI",
+            helpfulNotes: aiResponse.helpfulNotes || "",
             relatedSkills: Array.isArray(aiResponse.relatedSkills)
               ? aiResponse.relatedSkills
-              : ["general"],
+              : [],
             status: "In Progress",
-            assignedTo: mongoose.Types.ObjectId(moderator._id),
+            assignedTo: moderator._id,
           },
           { new: true, runValidators: true }
         );
-
         if (!updated) throw new NonRetriableError("Ticket update failed");
         return updated;
       });
       console.log("✅ Ticket updated successfully:", updatedTicket._id.toString());
 
-      // 6️⃣ Send email safely
+      // 6️⃣ Send email
       await step.run("send-email", async () => {
         try {
           await mailSender(
