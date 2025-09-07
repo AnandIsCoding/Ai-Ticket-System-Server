@@ -18,7 +18,7 @@ export const onTicketCreated = inngest.createFunction(
     try {
       console.log("🚀 Inngest Function triggered for event:", event.name);
 
-      // Connect to MongoDB if not already connected
+      // 1️⃣ Ensure MongoDB connection
       if (mongoose.connection.readyState !== 1) {
         await mongoose.connect(DATABASE_URI, {
           useNewUrlParser: true,
@@ -32,7 +32,7 @@ export const onTicketCreated = inngest.createFunction(
       const { ticketId } = event.data;
       if (!ticketId) throw new NonRetriableError("No ticketId in event data");
 
-      // Fetch ticket
+      // 2️⃣ Fetch ticket
       ticket = await step.run("fetch-ticket", async () => {
         const t = await Ticket.findById(ticketId);
         if (!t) throw new NonRetriableError("Ticket not found");
@@ -40,7 +40,7 @@ export const onTicketCreated = inngest.createFunction(
       });
       console.log("✅ Ticket fetched:", ticket._id.toString());
 
-      // Run AI analysis
+      // 3️⃣ Run AI analysis safely
       try {
         aiResponse = await analyzeTicket(ticket);
         if (!aiResponse) {
@@ -60,21 +60,19 @@ export const onTicketCreated = inngest.createFunction(
       }
       console.log("AI response:", aiResponse);
 
-      // Pick moderator/admin (or default to specific email)
+      // 4️⃣ Pick moderator/admin or fallback to specific email
       moderator = await step.run("assign-moderator", async () => {
         let user =
           (await User.findOne({ role: "moderator" })) ||
-          (await User.findOne({ role: "admin" }));
-        if (!user) {
-          // Default to specific email
-          user = await User.findOne({ email: "anandkumarj669@gmail.com" });
-        }
+          (await User.findOne({ role: "admin" })) ||
+          (await User.findOne({ email: "anandkumarj669@gmail.com" }));
+
         if (!user) throw new NonRetriableError("No admin or moderator found");
         return user;
       });
       console.log("✅ Assigned to user:", moderator.email, moderator._id.toString());
 
-      // Update ticket
+      // 5️⃣ Update ticket with AI fields + assignedTo
       updatedTicket = await step.run("update-ticket", async () => {
         const updated = await Ticket.findByIdAndUpdate(
           ticket._id,
@@ -85,7 +83,7 @@ export const onTicketCreated = inngest.createFunction(
               ? aiResponse.relatedSkills
               : ["general"],
             status: "In Progress",
-            assignedTo: moderator._id, // leave as ObjectId
+            assignedTo: mongoose.Types.ObjectId(moderator._id), // ensures ObjectId
           },
           { new: true, runValidators: true }
         );
@@ -95,7 +93,7 @@ export const onTicketCreated = inngest.createFunction(
       });
       console.log("✅ Ticket updated successfully:", updatedTicket._id.toString());
 
-      // Send email
+      // 6️⃣ Send email
       await step.run("send-email", async () => {
         try {
           await mailSender(
