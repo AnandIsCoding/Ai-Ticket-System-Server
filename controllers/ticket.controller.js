@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import { StatusCodes } from "http-status-codes";
+import mongoose from "mongoose";
 
 import { inngest } from "../inngest/client.js";
 import Ticket from "../models/ticket.model.js";
@@ -18,7 +19,7 @@ export const createTicket = async (req, res) => {
     const newTicket = await Ticket.create({
       title,
       description,
-      createdBy: req.user.userId,
+      createdBy: mongoose.Types.ObjectId(req.user.userId), // ensure ObjectId
       status: "Todo",
       priority: "medium",
       relatedSkills: [],
@@ -27,12 +28,11 @@ export const createTicket = async (req, res) => {
     console.log("Ticket created:", newTicket._id);
     console.log("Sending Inngest event...");
 
-    // ✅ Correctly send to production Inngest URL
     await inngest.send(
       {
         name: "ticket/created",
         data: {
-          ticketId: newTicket._id,
+          ticketId: newTicket._id.toString(),
           title,
           description,
           createdBy: req.user.userId,
