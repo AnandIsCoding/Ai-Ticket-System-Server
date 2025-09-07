@@ -1,4 +1,3 @@
-  import axios from "axios";
 import chalk from "chalk";
 import { StatusCodes } from "http-status-codes";
 
@@ -29,19 +28,17 @@ export const createTicket = async (req, res) => {
 
     // Send event to Inngest
     console.log("Ticket created:", newTicket._id);
- 
-
-// ...
-
-console.log("Sending Inngest event via webhook...");
-await axios.post(process.env.INNGEST_WEBHOOK_URL, {
-  ticketId: newTicket._id,
-  title,
-  description,
-  createdBy: req.user.userId,
-});
-console.log("✅ Inngest event sent!");
-
+    console.log("Sending Inngest event...");
+    await inngest.send({
+      name: "ticket/created",
+      data: {
+        ticketId: newTicket._id,
+        title,
+        description,
+        createdBy: req.user.userId,
+      },
+    });
+    console.log("✅ Inngest event sent!");
 
     return res.status(StatusCodes.OK).json({
       success: true,
