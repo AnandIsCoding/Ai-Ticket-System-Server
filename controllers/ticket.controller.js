@@ -37,6 +37,7 @@ export const createTicket = async (req, res) => {
         description,
         createdBy: req.user.userId,
       },
+        url:"https://ai-ticket-system-server.vercel.app/api/v1/inngest"
     });
     console.log("✅ Inngest event sent!");
 
