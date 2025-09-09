@@ -13,7 +13,10 @@ export const onTicketCreated = inngest.createFunction(
   { id: "on-ticket-created", retries: 4 },
   { event: "ticket/created" },
   async ({ event, step }) => {
-    let ticket, moderator, updatedTicket, aiResponse = {};
+    let ticket,
+      moderator,
+      updatedTicket,
+      aiResponse = {};
 
     try {
       console.log("🚀 Inngest Function triggered for event:", event.name);
@@ -64,15 +67,46 @@ export const onTicketCreated = inngest.createFunction(
 
       // 4️⃣ Pick moderator/admin or fallback to specific email
       moderator = await step.run("assign-moderator", async () => {
-        let user =
-          (await User.findOne({ role: "moderator" })) ||
-          (await User.findOne({ role: "admin" })) ||
-          (await User.findOne({ email: "anandkumarj669@gmail.com" }));
+        // relatedSkills from AI response
+        const skills = Array.isArray(aiResponse.relatedSkills)
+          ? aiResponse.relatedSkills
+          : [];
 
-        if (!user) throw new NonRetriableError("No admin or moderator found");
+        let user = null;
+
+        // 1️⃣ Moderator with matching skills
+        if (skills.length > 0) {
+          user = await User.findOne({
+            role: "moderator",
+            skills: { $in: skills }, // assuming User model has 'skills' array field
+          });
+        }
+
+        // 2️⃣ Any moderator if no skill-match found
+        if (!user) {
+          user = await User.findOne({ role: "moderator" });
+        }
+
+        // 3️⃣ Any admin if no moderator at all
+        if (!user) {
+          user = await User.findOne({ role: "admin" });
+        }
+
+        // 4️⃣ Fallback email
+        if (!user) {
+          user = await User.findOne({ email: "anandkumarj669@gmail.com" });
+        }
+
+        if (!user)
+          throw new NonRetriableError("No admin/moderator fallback user found");
         return user;
       });
-      console.log("✅ Assigned to user:", moderator.email, moderator._id.toString());
+
+      console.log(
+        "✅ Assigned to user:",
+        moderator.email,
+        moderator._id.toString()
+      );
 
       // 5️⃣ Update ticket with AI fields + assignedTo
       updatedTicket = await step.run("update-ticket", async () => {
@@ -94,7 +128,10 @@ export const onTicketCreated = inngest.createFunction(
         if (!updated) throw new NonRetriableError("Ticket update failed");
         return updated;
       });
-      console.log("✅ Ticket updated successfully:", updatedTicket._id.toString());
+      console.log(
+        "✅ Ticket updated successfully:",
+        updatedTicket._id.toString()
+      );
 
       // 6️⃣ Send email
       await step.run("send-email", async () => {
