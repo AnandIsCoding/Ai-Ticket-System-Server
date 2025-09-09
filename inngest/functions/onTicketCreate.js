@@ -34,7 +34,9 @@ export const onTicketCreated = inngest.createFunction(
 
       // 2️⃣ Fetch ticket
       ticket = await step.run("fetch-ticket", async () => {
-        const t = await Ticket.findById(ticketId);
+        // make sure ticketId is ObjectId
+        const id = new mongoose.Types.ObjectId(ticketId);
+        const t = await Ticket.findById(id);
         if (!t) throw new NonRetriableError("Ticket not found");
         return t;
       });
@@ -83,7 +85,8 @@ export const onTicketCreated = inngest.createFunction(
               ? aiResponse.relatedSkills
               : ["general"],
             status: "In Progress",
-            assignedTo: mongoose.Types.ObjectId(moderator._id), // ensures ObjectId
+            // moderator._id is already an ObjectId
+            assignedTo: moderator._id,
           },
           { new: true, runValidators: true }
         );
